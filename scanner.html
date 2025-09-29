@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ticket Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+</head>
+<body>
+<h2>Ticket Scanner</h2>
+<input type="text" id="token" placeholder="Token" value="mein_geheimes_token"/>
+<video id="video" autoplay playsinline style="width:100%;max-width:400px"></video>
+<div id="status">Scanne ein Ticket...</div>
+
+<script>
+const video = document.getElementById("video");
+const status = document.getElementById("status");
+const tokenInput = document.getElementById("token");
+
+navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}})
+.then(stream => video.srcObject = stream)
+.catch(err => alert("Kamera-Fehler: "+err));
+
+const canvas = document.createElement("canvas");
+
+function tick() {
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video,0,0);
+    const imgData = canvas.getContext("2d").getImageData(0,0,canvas.width,canvas.height);
+    const code = jsQR(imgData.data, imgData.width, imgData.height);
+    if(code){
+      handleScan(code.data);
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+let lastScan = 0;
+function handleScan(ticketId){
+  if(Date.now()-lastScan<1500) return; // throttle
+  lastScan = Date.now();
+  status.textContent = "Scanne: " + ticketId;
+
+  fetch("https://script.google.com/macros/s/AKfycbw3p7Y5Wd8RY9mcV3PmUO1nQFHaB0mDkay84rKf6hicYFhdakMzcGw6r762QYlSlaQ/exec", {
+    method:"POST",
+    body: JSON.stringify({ticketId: ticketId, token: tokenInput.value})
+  }).then(r=>r.json()).then(res=>{
+    if(res.status==="ok"){
+      status.textContent = "✔️ OK – "+res.name;
+      status.style.color="green";
+    } else if(res.status==="used"){
+      status.textContent = "⚠️ Bereits gescannt – "+res.name;
+      status.style.color="orange";
+    } else {
+      status.textContent = "❌ Ungültiges Ticket";
+      status.style.color="red";
+    }
+  }).catch(err=>{
+    status.textContent="Fehler: "+err;
+    status.style.color="red";
+  });
+}
+
+tick();
+</script>
+</body>
+</html>
